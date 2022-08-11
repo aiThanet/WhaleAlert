@@ -24,6 +24,9 @@ class WhaleAlert:
 
         self.sym_check_list = utils.load_env_list('SYM_CHECK_LIST')
         self.ex_check_list = utils.load_env_list('EXCHANGE_CHECK_LIST')
+        
+        self.prev_timestamp = 0
+        self.hashes = []
 
     def check_owner_in_list(self, tran):
         return (tran['to'].get('owner','').upper() in self.ex_check_list) or (tran['from'].get('owner','').upper() in self.ex_check_list)
@@ -43,15 +46,19 @@ class WhaleAlert:
         results = []
         for tran in transactions:
             if tran['symbol'].upper() in self.sym_check_list and self.check_owner_in_list(tran):
-                results.append({
-                    'symbol': tran['symbol'].upper(),
-                    'from': 'Unknown' if tran['from']['owner_type'] == 'unknown' else tran['from']['owner'].upper(),
-                    'to': 'Unknown' if tran['to']['owner_type'] == 'unknown' else tran['to']['owner'].upper(),
-                    'amount': int(tran['amount']),
-                    'amount_usd': int(tran['amount_usd']),
-                    'timestamp': tran['timestamp'],
-                    'datetime': datetime.fromtimestamp(int(tran['timestamp'])).strftime("%d-%m-%Y %H:%M:%S")
-                })
+                if int(tran['timestamp']) > self.prev_timestamp: 
+                    results.append({
+                        'symbol': tran['symbol'].upper(),
+                        'from': 'Unknown' if tran['from']['owner_type'] == 'unknown' else tran['from']['owner'].upper(),
+                        'to': 'Unknown' if tran['to']['owner_type'] == 'unknown' else tran['to']['owner'].upper(),
+                        'amount': int(tran['amount']),
+                        'amount_usd': int(tran['amount_usd']),
+                        'timestamp': tran['timestamp'],
+                        'datetime': datetime.fromtimestamp(int(tran['timestamp'])).strftime("%d-%m-%Y %H:%M:%S")
+                    })
+
+        if len(results) > 0:
+            self.prev_timestamp = max([int(tran["timestamp"]) for tran in results])
 
         for res in results:
             self.send_line_notify(res)
