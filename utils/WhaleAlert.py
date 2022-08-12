@@ -47,7 +47,7 @@ class WhaleAlert:
         return price
 
     def print_bnb_price(self):
-        if self.get_price_until >= self.run_count and self.last_print_price > (self.run_count + (60//self.sleep_time)):
+        if self.get_price_until >= self.run_count and self.run_count >= (self.last_print_price + (60//self.sleep_time)):
             self.get_bnb_price()
             self.last_print_price = self.run_count
 
@@ -84,9 +84,10 @@ class WhaleAlert:
                         'datetime': datetime.fromtimestamp(int(tran['timestamp'])).strftime("%d-%m-%Y %H:%M:%S")
                     })
                     if _to == 'BINANCE':
-                        self.get_price_until = self.run_count + ((60//self.sleep_time) * 10)
+                        self.get_price_until = self.run_count + ((60//self.sleep_time) * 10) + 1
                         if self.run_count > self.last_print_price:
                             self.get_bnb_price()
+                            self.last_print_price = self.run_count
 
         if len(transactions) > 0:
             self.prev_timestamp = max([int(tran["timestamp"]) for tran in transactions])
