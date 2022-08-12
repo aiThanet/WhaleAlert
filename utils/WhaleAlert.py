@@ -42,8 +42,10 @@ class WhaleAlert:
         res = requests.get('https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BNBUSDT')
         res_json = res.json()
         price = "{:.2f}".format(float(res_json.get('markPrice',0)))
+        now = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+        txt = f' {now}\n-----\nBNB Mark Price: {price}'
         if line_notify:
-            self.line_notify.send(f"BNB Mark Price: {price}")
+            self.line_notify.send(txt)
         return price
 
     def print_bnb_price(self):
