@@ -17,4 +17,4 @@ docker login -u "$MY_USER" -p 'eba259b2-c52b-4ab8-9231-2d956e5516ee'
 
 docker pull "$MY_USER/$IMAGE_NAME:latest"
 
-docker run -d --name="whale-alert" -v /volume1/docker/whale-alert-env.txt:/app/.env "$MY_USER/$IMAGE_NAME:latest"
+docker run -d --restart=always --name="whale-alert" -v /volume1/docker/whale-alert-env.txt:/app/.env "$MY_USER/$IMAGE_NAME:latest"
