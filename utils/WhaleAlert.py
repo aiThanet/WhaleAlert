@@ -20,9 +20,9 @@ class WhaleAlert:
         self.line_token = os.environ.get('LINE_TOKEN', '')
         self.line_notify = LineNotify(self.line_token)
 
-        self.schedule = int(os.environ.get('MINUTE_SCHEDULE', 5))
+        self.lookback = int(os.environ.get('MINUTE_LOOKBACK', 5))
         self.min_usd = int(os.environ.get('MIN_USD_VALUE', 500000))
-        self.run_step = int(os.environ.get('RUN_STEP', 10))
+        self.sleep_time = int(os.environ.get('SLEEP_TIME', 10))
 
         self.sym_check_list = utils.load_env_list('SYM_CHECK_LIST')
         self.ex_check_list = utils.load_env_list('EXCHANGE_CHECK_LIST')
@@ -47,7 +47,7 @@ class WhaleAlert:
         return price
 
     def print_bnb_price(self):
-        if self.get_price_until >= self.run_count and self.last_print_price > (self.run_count + (60//self.run_step)):
+        if self.get_price_until >= self.run_count and self.last_print_price > (self.run_count + (60//self.sleep_time)):
             self.get_bnb_price()
             self.last_print_price = self.run_count
 
@@ -84,13 +84,13 @@ class WhaleAlert:
                         'datetime': datetime.fromtimestamp(int(tran['timestamp'])).strftime("%d-%m-%Y %H:%M:%S")
                     })
                     if _to == 'BINANCE':
-                        self.get_price_until = self.run_count + ((60//self.run_step) * 10)
+                        self.get_price_until = self.run_count + ((60//self.sleep_time) * 10)
                         if self.run_count > self.last_print_price:
                             self.get_bnb_price()
 
         if len(transactions) > 0:
             self.prev_timestamp = max([int(tran["timestamp"]) for tran in transactions])
-            
+
         for res in results:
             self.send_line_notify(res)
 
