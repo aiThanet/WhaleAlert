@@ -31,7 +31,7 @@ class WhaleAlert:
         self.run_count = 0
         self.last_print_price = 0
         self.get_price_until = 0
-        self.last_mark_price = 0
+        self.last_mark_price = {}
 
         logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s', level=logging.INFO, datefmt='%Y-%m-%d %H:%M:%S')
         
@@ -39,28 +39,42 @@ class WhaleAlert:
     def check_owner_in_list(self, tran):
         return ((tran['to'].get('owner','').upper() in self.ex_check_list) or (tran['from'].get('owner','').upper() in self.ex_check_list)) and (tran['to'].get('owner','') != tran['from'].get('owner',''))
 
-    def get_bnb_price(self, line_notify=True):
-        res = requests.get('https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BNBUSDT')
+    def get_coin_price(self, sym='BNB'):
+        res = requests.get(f'https://fapi.binance.com/fapi/v1/premiumIndex?symbol={sym}USDT')
         res_json = res.json()
         cur_price = float(res_json.get('markPrice',0))
-        price = "{:.2f}".format(cur_price)
-        now = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-        change = 0 if self.last_mark_price == 0 else (((cur_price - self.last_mark_price)/self.last_mark_price) * 100)
-        change_display = '' if change == 0 else ('(' + ('🟩+' if change > 0 else '🟥') + f'{"{:.2f}".format(change)}%)')
-        txt = f' {now}\n-----\nBNB Mark Price: {price} {change_display}\nLast Mark Price: {"{:.2f}".format(self.last_mark_price)}'
-        if line_notify:
-            self.line_notify.send(txt)
-        self.last_mark_price = cur_price
-        return price
+        
+        return cur_price
 
-    def print_bnb_price(self):
-        if self.get_price_until >= self.run_count and self.run_count >= (self.last_print_price + (60//self.sleep_time)):
-            self.get_bnb_price()
+    def send_line_all_prices(self, price_dict):
+        now = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+        txt = f' {now}\n------------------------------\n'
+
+        for sym in price_dict:
+            cur_price = price_dict[sym]
+            price = "{:.2f}".format(cur_price)
+            change = 0 if self.last_mark_price.get(sym, 0) == 0 else (((cur_price - self.last_mark_price.get(sym, 0))/self.last_mark_price.get(sym, 0)) * 100)
+            change_display = '' if change == 0 else ('(' + ('🟩+' if change > 0 else '🟥') + f'{"{:.2f}".format(change)}%)')
+            txt += f'{sym} Mark Price: {price} {change_display}\nLast Mark Price: {"{:.2f}".format(self.last_mark_price.get(sym, 0))}\n'
+            self.last_mark_price[sym] = cur_price
+        
+        self.line_notify.send(txt)
+        
+
+    def print_all_prices(self):
+            bnb_price = self.get_coin_price(sym='BNB')
+            btc_price = self.get_coin_price(sym='BTC')
+            price_dict = {
+                'BNB': bnb_price,
+                'BTC': btc_price
+            }
+            self.send_line_all_prices(price_dict)
             self.last_print_price = self.run_count
 
     def run(self, time):
         self.run_count += 1
-        self.print_bnb_price()
+        if self.get_price_until >= self.run_count and self.run_count >= (self.last_print_price + (60//self.sleep_time)):
+            self.print_all_prices()
         
         query = {
             'start': time,
@@ -93,8 +107,7 @@ class WhaleAlert:
                     if _to == 'BINANCE':
                         self.get_price_until = self.run_count + ((60//self.sleep_time) * 10) + 1
                         if self.run_count > self.last_print_price:
-                            self.get_bnb_price()
-                            self.last_print_price = self.run_count
+                            self.print_all_prices()
 
         if len(transactions) > 0:
             self.prev_timestamp = max([int(tran["timestamp"]) for tran in transactions])
