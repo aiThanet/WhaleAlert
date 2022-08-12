@@ -9,10 +9,9 @@ whaleAlert = WhaleAlert()
 # schedule.every(whaleAlert.schedule).minutes.do(whaleAlert.run)
 
 start_ts = int(datetime.timestamp(datetime.now())) - (whaleAlert.schedule * 60)
-step = whaleAlert.schedule * 60
 
 while True:
     whaleAlert.run(start_ts)
-    start_ts += step
+    start_ts = int(datetime.timestamp(datetime.now())) - (whaleAlert.schedule * 60)
     
-    time.sleep(step)
+    time.sleep(whaleAlert.run_step)

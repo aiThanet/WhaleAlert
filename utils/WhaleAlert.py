@@ -3,6 +3,7 @@ from line_notify import LineNotify
 from datetime import datetime
 from utils import utils
 
+import logging
 import requests
 import json
 import os
@@ -21,17 +22,39 @@ class WhaleAlert:
 
         self.schedule = int(os.environ.get('MINUTE_SCHEDULE', 5))
         self.min_usd = int(os.environ.get('MIN_USD_VALUE', 500000))
+        self.run_step = int(os.environ.get('RUN_STEP', 10))
 
         self.sym_check_list = utils.load_env_list('SYM_CHECK_LIST')
         self.ex_check_list = utils.load_env_list('EXCHANGE_CHECK_LIST')
         
         self.prev_timestamp = 0
-        self.hashes = []
+        self.run_count = 0
+        self.last_print_price = 0
+        self.get_price_until = 0
+
+        logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s', level=logging.INFO, datefmt='%Y-%m-%d %H:%M:%S')
+        
 
     def check_owner_in_list(self, tran):
-        return (tran['to'].get('owner','').upper() in self.ex_check_list) or (tran['from'].get('owner','').upper() in self.ex_check_list)
+        return ((tran['to'].get('owner','').upper() in self.ex_check_list) or (tran['from'].get('owner','').upper() in self.ex_check_list)) and (tran['to'].get('owner','') != tran['from'].get('owner',''))
+
+    def get_bnb_price(self, line_notify=True):
+        res = requests.get('https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BNBUSDT')
+        res_json = res.json()
+        price = "{:.2f}".format(float(res_json.get('markPrice',0)))
+        if line_notify:
+            self.line_notify.send(f"BNB Mark Price: {price}")
+        return price
+
+    def print_bnb_price(self):
+        if self.get_price_until >= self.run_count and self.last_print_price > (self.run_count + (60//self.run_step)):
+            self.get_bnb_price()
+            self.last_print_price = self.run_count
 
     def run(self, time):
+        self.run_count += 1
+        self.print_bnb_price()
+        
         query = {
             'start': time,
             'min_value': self.min_usd,
@@ -39,23 +62,31 @@ class WhaleAlert:
         }
         query = '&'.join([f'{q}={query[q]}' for q in query])
         res = requests.get(self.url + '?' + query)
-        transactions = res.json().get('transactions',[])
-
-        
+        res_json = res.json()
+        if(res_json.get('result','') != 'success'):
+            logging.error(res_json)
+        transactions = res_json.get('transactions',[])
 
         results = []
         for tran in transactions:
-            if tran['symbol'].upper() in self.sym_check_list and self.check_owner_in_list(tran):
-                if int(tran['timestamp']) > self.prev_timestamp: 
+            if tran['symbol'].upper() in self.sym_check_list and int(tran['timestamp']) > self.prev_timestamp:
+                _from = 'Unknown' if tran['from']['owner_type'] == 'unknown' else tran['from']['owner'].upper()
+                _to = 'Unknown' if tran['to']['owner_type'] == 'unknown' else tran['to']['owner'].upper()
+                logging.info(f'{"{:,}".format(int(tran["amount"]))} {tran["symbol"].upper()} ({"{:,}".format(int(tran["amount_usd"]))} USD) transfer from {_from} to {_to}')
+                if self.check_owner_in_list(tran):
                     results.append({
                         'symbol': tran['symbol'].upper(),
-                        'from': 'Unknown' if tran['from']['owner_type'] == 'unknown' else tran['from']['owner'].upper(),
-                        'to': 'Unknown' if tran['to']['owner_type'] == 'unknown' else tran['to']['owner'].upper(),
+                        'from': _from,
+                        'to': _to,
                         'amount': int(tran['amount']),
                         'amount_usd': int(tran['amount_usd']),
                         'timestamp': tran['timestamp'],
                         'datetime': datetime.fromtimestamp(int(tran['timestamp'])).strftime("%d-%m-%Y %H:%M:%S")
                     })
+                    if _to == 'BINANCE':
+                        self.get_price_until = self.run_count + ((60//self.run_step) * 10)
+                        if self.run_count > self.last_print_price:
+                            self.get_bnb_price()
 
         if len(results) > 0:
             self.prev_timestamp = max([int(tran["timestamp"]) for tran in results])
