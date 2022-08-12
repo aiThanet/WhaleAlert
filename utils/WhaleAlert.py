@@ -31,6 +31,7 @@ class WhaleAlert:
         self.run_count = 0
         self.last_print_price = 0
         self.get_price_until = 0
+        self.last_mark_price = 0
 
         logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s', level=logging.INFO, datefmt='%Y-%m-%d %H:%M:%S')
         
@@ -41,11 +42,15 @@ class WhaleAlert:
     def get_bnb_price(self, line_notify=True):
         res = requests.get('https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BNBUSDT')
         res_json = res.json()
-        price = "{:.2f}".format(float(res_json.get('markPrice',0)))
+        cur_price = float(res_json.get('markPrice',0))
+        price = "{:.2f}".format(cur_price)
         now = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-        txt = f' {now}\n-----\nBNB Mark Price: {price}'
+        change = 0 if self.last_mark_price == 0 else (((cur_price - self.last_mark_price)/self.last_mark_price) * 100)
+        change_display = '' if change == 0 else ('(' + ('🟩+' if change > 0 else '🟥') + f'{"{:.2f}".format(change)}%)')
+        txt = f' {now}\n-----\nBNB Mark Price: {price} {change_display}\nLast Mark Price: {"{:.2f}".format(self.last_mark_price)}'
         if line_notify:
             self.line_notify.send(txt)
+        self.last_mark_price = cur_price
         return price
 
     def print_bnb_price(self):
