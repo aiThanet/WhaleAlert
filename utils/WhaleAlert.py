@@ -88,9 +88,9 @@ class WhaleAlert:
                         if self.run_count > self.last_print_price:
                             self.get_bnb_price()
 
-        if len(results) > 0:
-            self.prev_timestamp = max([int(tran["timestamp"]) for tran in results])
-
+        if len(transactions) > 0:
+            self.prev_timestamp = max([int(tran["timestamp"]) for tran in transactions])
+            
         for res in results:
             self.send_line_notify(res)
 
