@@ -32,6 +32,7 @@ class WhaleAlert:
         self.last_print_price = 0
         self.get_price_until = 0
         self.last_mark_price = {}
+        self.data = []
 
         logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s', level=logging.INFO, datefmt='%Y-%m-%d %H:%M:%S')
         
@@ -61,20 +62,41 @@ class WhaleAlert:
         self.line_notify.send(txt)
         
 
-    def print_all_prices(self):
+    def print_all_prices(self, notify=True):
             bnb_price = self.get_coin_price(sym='BNB')
             btc_price = self.get_coin_price(sym='BTC')
             price_dict = {
                 'BNB': bnb_price,
                 'BTC': btc_price
             }
-            self.send_line_all_prices(price_dict)
+            if notify:
+                self.send_line_all_prices(price_dict)
             self.last_print_price = self.run_count
+            return price_dict
+
+    def write_log(self, txt):
+        with open('prices.txt', 'a') as f:
+            f.write(txt)
 
     def run(self, time):
         self.run_count += 1
         if self.get_price_until >= self.run_count and self.run_count >= (self.last_print_price + (60//self.sleep_time)):
-            self.print_all_prices()
+            prices = self.print_all_prices(notify=False)
+            for i in range(len(self.data)-1, -1, -1):
+                if self.run_count <= self.data[i]['end']:
+                    self.data[i]['btc'].append(prices['BTC'])
+                    self.data[i]['bnb'].append(prices['BNB'])
+                else:
+                    txt = f"{self.data[i]['symbol']},{self.data[i]['from']} {self.data[i]['to']},{self.data[i]['amount']},{self.data[i]['amount_usd']},{self.data[i]['datetime']}"
+                   
+                    btcs = ','.join(self.data[i]['btc'])
+                    bnbs = ','.join(self.data[i]['bnb'])
+                    txt += f",{btcs},{bnbs}\n"
+
+                    self.write_log(txt)
+
+                    del self.data[i]
+
         
         query = {
             'start': time,
@@ -83,7 +105,10 @@ class WhaleAlert:
         }
         query = '&'.join([f'{q}={query[q]}' for q in query])
         res = requests.get(self.url + '?' + query)
-        res_json = res.json()
+        try:
+            res_json = res.json()
+        except:
+            return
         if(res_json.get('result','') != 'success'):
             logging.error(res_json)
         transactions = res_json.get('transactions',[])
@@ -94,8 +119,8 @@ class WhaleAlert:
                 _from = 'Unknown' if tran['from']['owner_type'] == 'unknown' else tran['from']['owner'].upper()
                 _to = 'Unknown' if tran['to']['owner_type'] == 'unknown' else tran['to']['owner'].upper()
                 logging.info(f'{"{:,}".format(int(tran["amount"]))} {tran["symbol"].upper()} ({"{:,}".format(int(tran["amount_usd"]))} USD) transfer from {_from} to {_to}')
-                if self.check_owner_in_list(tran):
-                    results.append({
+                if self.check_owner_in_list(tran) and _from == 'Unknown' and _to == 'BINANCE':
+                    res = {
                         'symbol': tran['symbol'].upper(),
                         'from': _from,
                         'to': _to,
@@ -103,11 +128,17 @@ class WhaleAlert:
                         'amount_usd': int(tran['amount_usd']),
                         'timestamp': tran['timestamp'],
                         'datetime': datetime.fromtimestamp(int(tran['timestamp'])).strftime("%d-%m-%Y %H:%M:%S")
-                    })
-                    if _to == 'BINANCE':
-                        self.get_price_until = self.run_count + ((60//self.sleep_time) * 10) + 1
-                        if self.run_count > self.last_print_price:
-                            self.print_all_prices()
+                    }
+                    results.append(res)
+                    self.get_price_until = self.run_count + ((60//self.sleep_time) * 10) + 1
+                    
+                    prices = self.print_all_prices()
+                    res['btc'] = [prices['BTC']]
+                    res['bnb'] = [prices['BNB']]
+                    res['start'] = self.run_count
+                    res['end'] = self.get_price_until
+
+                    self.data.append(res)
 
         if len(transactions) > 0:
             self.prev_timestamp = max([int(tran["timestamp"]) for tran in transactions])
