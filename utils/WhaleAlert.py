@@ -89,8 +89,8 @@ class WhaleAlert:
                 else:
                     txt = f"{self.data[i]['symbol']},{self.data[i]['from']} {self.data[i]['to']},{self.data[i]['amount']},{self.data[i]['amount_usd']},{self.data[i]['datetime']}"
                    
-                    btcs = ','.join(self.data[i]['btc'])
-                    bnbs = ','.join(self.data[i]['bnb'])
+                    btcs = ','.join([str(p) for p in self.data[i]['btc']])
+                    bnbs = ','.join([str(p) for p in self.data[i]['bnb']])
                     txt += f",{btcs},{bnbs}\n"
 
                     self.write_log(txt)
@@ -132,7 +132,7 @@ class WhaleAlert:
                     results.append(res)
                     self.get_price_until = self.run_count + ((60//self.sleep_time) * 10) + 1
                     
-                    prices = self.print_all_prices()
+                    prices = self.print_all_prices(notify=False)
                     res['btc'] = [prices['BTC']]
                     res['bnb'] = [prices['BNB']]
                     res['start'] = self.run_count
